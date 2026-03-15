@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tastenote</title>
+  <style>
+    /* Theme: neutral dark base + single muted accent (casual, not game-like) */
+    * { box-sizing: border-box; }
+    :root {
+      --bg: #1e1e20;
+      --bg-subtle: #252528;
+      --text: #e6e6e8;
+      --text-muted: #8a8a8e;
+      --surface: rgba(255,255,255,0.04);
+      --border: rgba(255,255,255,0.08);
+      --accent: #6b9080;
+      --accent-hover: #7aa092;
+      --accent-muted: rgba(107,144,128,0.25);
+    }
+    body {
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      max-width: 32rem;
+      margin: 0 auto;
+      padding: 1.5rem 1.25rem;
+      min-height: 100vh;
+      background: linear-gradient(165deg, var(--bg) 0%, var(--bg-subtle) 50%, var(--bg) 100%);
+      color: var(--text);
+      text-align: center;
+    }
+    .header {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.25rem;
+      margin-bottom: 1.5rem;
+    }
+    .header-icon { font-size: 1.75rem; }
+    h1 {
+      font-size: 1.35rem;
+      font-weight: 600;
+      margin: 0;
+      letter-spacing: -0.02em;
+      color: var(--text);
+    }
+    .tagline {
+      font-size: 0.85rem;
+      font-weight: 400;
+      color: var(--text-muted);
+      margin: 0;
+      letter-spacing: 0.02em;
+    }
+    .nav {
+      display: flex;
+      justify-content: center;
+      gap: 0.5rem;
+      margin-bottom: 1.25rem;
+    }
+    .nav a {
+      padding: 0.4rem 0.9rem;
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 0.5rem;
+      text-decoration: none;
+      transition: color 0.2s, background 0.2s, border-color 0.2s;
+    }
+    .nav a:hover { color: var(--text); background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.14); }
+    .nav a.active { color: var(--accent); background: var(--accent-muted); border-color: rgba(107,144,128,0.5); }
+    .repertoire-list {
+      text-align: left;
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .repertoire-list li {
+      padding: 0.75rem 1rem;
+      margin-bottom: 0.5rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 0.75rem;
+      cursor: pointer;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .repertoire-list li:hover {
+      background: rgba(255,255,255,0.07);
+      border-color: rgba(255,255,255,0.12);
+    }
+    .repertoire-list .note-title { font-weight: 600; color: var(--text); margin-bottom: 0.2rem; }
+    .repertoire-list .note-meta { font-size: 0.8rem; color: var(--text-muted); }
+    .repertoire-back {
+      margin-bottom: 1rem;
+      text-align: left;
+    }
+    .repertoire-back a {
+      font-size: 0.9rem;
+      color: var(--accent);
+      text-decoration: none;
+    }
+    .repertoire-back a:hover { text-decoration: underline; }
+    .buttons {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .start-btn {
+      width: 100%;
+      max-width: 18rem;
+      padding: 0.7rem 1.2rem;
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 0.75rem;
+      cursor: pointer;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .start-btn:hover:not(:disabled) {
+      background: rgba(255,255,255,0.08);
+      border-color: rgba(255,255,255,0.14);
+    }
+    .start-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .capture-btn {
+      width: 100%;
+      max-width: 18rem;
+      padding: 1.25rem 1.75rem;
+      font-size: 1.1rem;
+      font-weight: 600;
+      color: #fff;
+      background: var(--accent);
+      border: none;
+      border-radius: 1rem;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+    }
+    .capture-btn:hover:not(:disabled) {
+      background: var(--accent-hover);
+      transform: scale(1.01);
+    }
+    .capture-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .mode-label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 1rem;
+      margin-bottom: 0.25rem;
+    }
+    .manual-btn {
+      width: 100%;
+      max-width: 18rem;
+      padding: 0.65rem 1.1rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      border-radius: 0.75rem;
+      cursor: pointer;
+      transition: background 0.2s, border-color 0.2s, transform 0.1s;
+    }
+    .manual-start {
+      color: var(--text);
+      background: var(--surface);
+      border: 1px solid var(--border);
+    }
+    .manual-start:hover:not(:disabled) {
+      background: rgba(255,255,255,0.08);
+      border-color: rgba(255,255,255,0.14);
+    }
+    .manual-stop {
+      color: #fff;
+      background: #5a7a6e;
+      border: none;
+      transition: background 0.2s, transform 0.1s;
+    }
+    .manual-stop:hover:not(:disabled) {
+      background: #6b8a7e;
+      transform: scale(1.01);
+    }
+    .manual-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .status {
+      margin-top: 1rem;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      min-height: 1.2rem;
+    }
+    .status.error { color: #c97a6e; }
+    .result {
+      margin-top: 2rem;
+      padding: 1.5rem;
+      background: var(--surface);
+      border-radius: 1rem;
+      border: 1px solid var(--border);
+    }
+    .result h2 {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--accent);
+      margin: 0 0 0.5rem 0;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .result .text {
+      font-size: 0.9rem;
+      line-height: 1.55;
+      color: var(--text);
+      white-space: pre-wrap;
+      word-break: break-word;
+      margin: 0 0 1rem 0;
+    }
+    .result .text:last-of-type { margin-bottom: 0; }
+    .result .text { text-align: left; }
+    .result h2 { text-align: left; }
+    .result .summary { margin-top: 1.25rem; padding-top: 1.25rem; border-top: 1px solid var(--border); }
+    .viz-section {
+      margin-top: 1.25rem;
+      padding-top: 1.25rem;
+      border-top: 1px solid var(--border);
+      text-align: center;
+    }
+    .viz-section h3 {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--accent);
+      margin: 0 0 0.75rem 0;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .wheel-wrap {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 1.5rem;
+    }
+    .wheel-wrap:last-of-type { margin-bottom: 0; }
+    .wheel-svg {
+      max-width: 100%;
+      height: auto;
+    }
+    .wheel-legend {
+      margin-top: 0.75rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      justify-content: center;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+    .wheel-legend span { display: inline-flex; align-items: center; gap: 0.25rem; }
+    .wheel-legend .dot { width: 6px; height: 6px; border-radius: 50%; }
+    .wheel-legend .legend-radar { margin-left: 0.5rem; color: var(--accent); }
+
+    /* Tasting wheel: full 360° wheel */
+    .wheel-fan {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 1.5rem;
+    }
+    .wheel-fan svg {
+      max-width: 100%;
+      height: auto;
+    }
+    .wheel-fan svg text {
+      transition: opacity 0.25s ease-out;
+    }
+
+    /* Radar polygon: animated via JS (class toggled when animation done) */
+    .radar-polygon {
+      transition: opacity 0.2s;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <span class="header-icon" aria-hidden="true">🍷</span>
+    <h1>Tastenote</h1>
+    <p class="tagline">Say what you taste.</p>
+  </div>
+  <nav class="nav" aria-label="Main">
+    <a href="#" id="navCapture" class="active">Capture</a>
+    <a href="#" id="navRepertoire">Repertoire</a>
+  </nav>
+  <div id="captureView">
+  <div class="buttons">
+    <button type="button" class="start-btn" id="startBtn">▶ Start 30s buffer</button>
+    <button type="button" class="capture-btn" id="captureBtn" disabled>Capture last 30s</button>
+    <p class="mode-label">Or take your time</p>
+    <button type="button" class="manual-btn manual-start" id="manualStartBtn">▶ Start manual record</button>
+    <button type="button" class="manual-btn manual-stop" id="manualStopBtn" disabled>⏹ Stop & send</button>
+  </div>
+  <p class="status" id="status" aria-live="polite"></p>
+  </div>
+  <div id="repertoireView" hidden>
+    <div id="repertoireList"></div>
+    <div class="repertoire-back" id="repertoireBack" hidden><a href="#" id="backToList">← Back to list</a></div>
+  </div>
+  <div class="result" id="result" hidden>
+    <h2>What you said</h2>
+    <p class="text" id="transcription"></p>
+    <h2 class="summary">Tasting summary</h2>
+    <p class="text" id="textSummary"></p>
+    <div class="viz-section">
+      <h3>Tasting wheel</h3>
+      <div class="wheel-fan" id="wheelFan" aria-label="Tasting wheel by flavor"></div>
+      <h3>Radar chart</h3>
+      <div class="wheel-wrap">
+        <svg class="wheel-svg" id="radarSvg" viewBox="0 0 260 260" aria-label="Radar chart"></svg>
+      </div>
+      <div class="wheel-legend" id="wheelLegend"></div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const CAPTURE_DURATION_SEC = 30;
+      const SAMPLE_RATE = 44100;
+      const BUFFER_LENGTH = CAPTURE_DURATION_SEC * SAMPLE_RATE;
+
+      let audioContext = null;
+      let buffer = null;
+      let writeIndex = 0;
+      let stream = null;
+      let scriptNode = null;
+      let isRecording = false;
+
+      let manualRecording = false;
+      let manualStream = null;
+      let manualContext = null;
+      let manualScriptNode = null;
+      let manualChunks = [];
+      const MANUAL_MAX_SAMPLES = 5 * 60 * SAMPLE_RATE;
+
+      const startBtn = document.getElementById("startBtn");
+      const captureBtn = document.getElementById("captureBtn");
+      const manualStartBtn = document.getElementById("manualStartBtn");
+      const manualStopBtn = document.getElementById("manualStopBtn");
+      const statusEl = document.getElementById("status");
+      const resultEl = document.getElementById("result");
+      const transcriptionEl = document.getElementById("transcription");
+      const textSummaryEl = document.getElementById("textSummary");
+      const wheelFan = document.getElementById("wheelFan");
+      const radarSvg = document.getElementById("radarSvg");
+      const wheelLegend = document.getElementById("wheelLegend");
+      const captureView = document.getElementById("captureView");
+      const repertoireView = document.getElementById("repertoireView");
+      const repertoireList = document.getElementById("repertoireList");
+      const repertoireBack = document.getElementById("repertoireBack");
+      const navCapture = document.getElementById("navCapture");
+      const navRepertoire = document.getElementById("navRepertoire");
+
+      // 8 categories (Whisky Magazine / Council of Whiskey Masters style). See NOTES.md.
+      const WHEEL_CATEGORIES = ["Cereal", "Fruity", "Floral", "Peaty", "Feinty", "Sulphury", "Woody", "Winey"];
+      const WHEEL_COLORS = {
+        Cereal: "#c4a574",
+        Fruity: "#c94b6c",
+        Floral: "#b88bb8",
+        Peaty: "#5c5048",
+        Feinty: "#9a7b5a",
+        Sulphury: "#8b7355",
+        Woody: "#5c4033",
+        Winey: "#8b3a62",
+      };
+
+      function setStatus(text, isError) {
+        statusEl.textContent = text;
+        statusEl.classList.toggle("error", !!isError);
+      }
+
+      function floatTo16BitPCM(float32Array) {
+        const int16 = new Int16Array(float32Array.length);
+        for (let i = 0; i < float32Array.length; i++) {
+          const s = Math.max(-1, Math.min(1, float32Array[i]));
+          int16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+        }
+        return int16;
+      }
+
+      function writeWAVHeader(dataView, numChannels, sampleRate, dataSize) {
+        const blockAlign = numChannels * 2;
+        const byteRate = sampleRate * blockAlign;
+        function writeStr(off, str) {
+          for (let i = 0; i < str.length; i++) dataView.setUint8(off + i, str.charCodeAt(i));
+        }
+        writeStr(0, "RIFF");
+        dataView.setUint32(4, 36 + dataSize - 8, true);
+        writeStr(8, "WAVE");
+        writeStr(12, "fmt ");
+        dataView.setUint32(16, 16, true);
+        dataView.setUint16(20, 1, true);
+        dataView.setUint16(22, numChannels, true);
+        dataView.setUint32(24, sampleRate, true);
+        dataView.setUint32(28, byteRate, true);
+        dataView.setUint16(32, blockAlign, true);
+        dataView.setUint16(34, 16, true);
+        writeStr(36, "data");
+        dataView.setUint32(40, dataSize, true);
+      }
+
+      function buildWAVBlob() {
+        if (!buffer) return null;
+        const samples = new Float32Array(BUFFER_LENGTH);
+        for (let i = 0; i < BUFFER_LENGTH; i++) {
+          const idx = (writeIndex + i) % BUFFER_LENGTH;
+          samples[i] = buffer[idx];
+        }
+        const pcm = floatTo16BitPCM(samples);
+        const dataSize = pcm.length * 2;
+        const fullBuffer = new ArrayBuffer(44 + dataSize);
+        const fullView = new DataView(fullBuffer);
+        writeWAVHeader(fullView, 1, SAMPLE_RATE, dataSize);
+        new Int16Array(fullBuffer, 44).set(pcm);
+        return new Blob([fullBuffer], { type: "audio/wav" });
+      }
+
+      function buildWAVBlobFromChunks(chunks) {
+        if (!chunks || chunks.length === 0) return null;
+        let totalLen = 0;
+        for (let i = 0; i < chunks.length; i++) totalLen += chunks[i].length;
+        const combined = new Float32Array(totalLen);
+        let offset = 0;
+        for (let i = 0; i < chunks.length; i++) {
+          combined.set(chunks[i], offset);
+          offset += chunks[i].length;
+        }
+        const pcm = floatTo16BitPCM(combined);
+        const dataSize = pcm.length * 2;
+        const fullBuffer = new ArrayBuffer(44 + dataSize);
+        const fullView = new DataView(fullBuffer);
+        writeWAVHeader(fullView, 1, SAMPLE_RATE, dataSize);
+        new Int16Array(fullBuffer, 44).set(pcm);
+        return new Blob([fullBuffer], { type: "audio/wav" });
+      }
+
+      async function startRecording() {
+        if (isRecording) return;
+        try {
+          setStatus("Requesting microphone…");
+          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
+          buffer = new Float32Array(BUFFER_LENGTH);
+          writeIndex = 0;
+          const source = audioContext.createMediaStreamSource(stream);
+          scriptNode = audioContext.createScriptProcessor(4096, 1, 1);
+          scriptNode.onaudioprocess = function (e) {
+            const input = e.inputBuffer.getChannelData(0);
+            for (let i = 0; i < input.length; i++) {
+              buffer[writeIndex] = input[i];
+              writeIndex = (writeIndex + 1) % BUFFER_LENGTH;
+            }
+          };
+          source.connect(scriptNode);
+          scriptNode.connect(audioContext.destination);
+          isRecording = true;
+          startBtn.textContent = "⏹ Stop 30s buffer";
+          captureBtn.disabled = false;
+          manualStartBtn.disabled = true;
+          setStatus("Recording last 30s. When ready, click Capture last 30s.");
+        } catch (err) {
+          setStatus("Microphone access denied or unavailable.", true);
+        }
+      }
+
+      function stopRecording() {
+        if (!isRecording) return;
+        if (scriptNode) scriptNode.disconnect();
+        if (stream) stream.getTracks().forEach(function (t) { t.stop(); });
+        scriptNode = null;
+        stream = null;
+        buffer = null;
+        isRecording = false;
+        startBtn.textContent = "▶ Start 30s buffer";
+        captureBtn.disabled = true;
+        setStatus("Stopped. Start 30s buffer to try again.");
+        manualStartBtn.disabled = false;
+      }
+
+      async function startManualRecording() {
+        if (manualRecording || isRecording) return;
+        try {
+          setStatus("Requesting microphone…");
+          manualStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          manualContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
+          manualChunks = [];
+          const source = manualContext.createMediaStreamSource(manualStream);
+          manualScriptNode = manualContext.createScriptProcessor(4096, 1, 1);
+          manualScriptNode.onaudioprocess = function (e) {
+            const input = e.inputBuffer.getChannelData(0);
+            let total = 0;
+            for (let i = 0; i < manualChunks.length; i++) total += manualChunks[i].length;
+            if (total + input.length > MANUAL_MAX_SAMPLES) return;
+            manualChunks.push(new Float32Array(input));
+          };
+          source.connect(manualScriptNode);
+          manualScriptNode.connect(manualContext.destination);
+          manualRecording = true;
+          manualStartBtn.disabled = true;
+          manualStopBtn.disabled = false;
+          startBtn.disabled = true;
+          captureBtn.disabled = true;
+          setStatus("Recording. Take your time — press Stop & send when done (max 5 min).");
+        } catch (err) {
+          setStatus("Microphone access denied or unavailable.", true);
+        }
+      }
+
+      function stopManualRecording() {
+        if (!manualRecording) return;
+        if (manualScriptNode) manualScriptNode.disconnect();
+        if (manualStream) manualStream.getTracks().forEach(function (t) { t.stop(); });
+        manualScriptNode = null;
+        manualStream = null;
+        manualRecording = false;
+        manualStartBtn.disabled = false;
+        manualStopBtn.disabled = true;
+        startBtn.disabled = false;
+        captureBtn.disabled = !buffer;
+      }
+
+      // Aggregate wheel_flavors by category: { categoryName: [descriptor1, descriptor2, ...] }
+      function aggregateWheelFlavors(wheelFlavors) {
+        const byCat = {};
+        WHEEL_CATEGORIES.forEach(function (c) { byCat[c] = []; });
+        (wheelFlavors || []).forEach(function (entry) {
+          const cat = entry.category;
+          if (!byCat[cat]) byCat[cat] = [];
+          (entry.descriptors || []).forEach(function (d) {
+            if (d && byCat[cat].indexOf(d) === -1) byCat[cat].push(d);
+          });
+        });
+        return byCat;
+      }
+
+      function drawTastingWheel(wheelFlavors) {
+        const byCat = aggregateWheelFlavors(wheelFlavors);
+        wheelFan.innerHTML = "";
+        const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        svg.setAttribute("viewBox", "0 0 260 260");
+        svg.setAttribute("aria-label", "Tasting wheel by flavor");
+        svg.setAttribute("class", "wheel-svg");
+
+        const cx = 130;
+        const cy = 130;
+        const innerR = 20;
+        const outerR = 95;
+        const n = WHEEL_CATEGORIES.length;
+        const segmentRad = (2 * Math.PI) / n;
+        const startRad = -Math.PI / 2;
+        const paths = [];
+        function rad2xy(rad, r) {
+          return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+        }
+        function segmentPath(a0, a1) {
+          const p1 = rad2xy(a0, innerR);
+          const p2 = rad2xy(a0, outerR);
+          const p3 = rad2xy(a1, outerR);
+          const p4 = rad2xy(a1, innerR);
+          const largeArc = 0;
+          const sweep = 1;
+          return "M " + p1.x + " " + p1.y + " L " + p2.x + " " + p2.y + " A " + outerR + " " + outerR + " 0 " + largeArc + " " + sweep + " " + p3.x + " " + p3.y + " L " + p4.x + " " + p4.y + " A " + innerR + " " + innerR + " 0 " + largeArc + " 0 " + p1.x + " " + p1.y + " Z";
+        }
+
+        for (let i = 0; i < n; i++) {
+          const cat = WHEEL_CATEGORIES[i];
+          const descriptors = byCat[cat] || [];
+          const lit = descriptors.length > 0;
+          const midRad = startRad + (i + 0.5) * segmentRad;
+          const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+          path.setAttribute("d", segmentPath(midRad, midRad));
+          path.setAttribute("fill", lit ? (WHEEL_COLORS[cat] || "#888") : "rgba(255,255,255,0.05)");
+          path.setAttribute("stroke", lit ? "rgba(255,255,255,0.35)" : "rgba(255,255,255,0.08)");
+          path.setAttribute("stroke-width", "0.8");
+          svg.appendChild(path);
+          paths.push({ path: path, midRad: midRad, halfSpan: segmentRad / 2 });
+          const labelR = outerR + 14;
+          const labelPos = rad2xy(midRad, labelR);
+          const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+          text.setAttribute("x", labelPos.x);
+          text.setAttribute("y", labelPos.y);
+          text.setAttribute("text-anchor", "middle");
+          text.setAttribute("dominant-baseline", "middle");
+          text.setAttribute("fill", lit ? (WHEEL_COLORS[cat] || "#6b9080") : "#6a6a6e");
+          text.setAttribute("font-size", "9");
+          text.setAttribute("font-weight", lit ? "600" : "400");
+          text.setAttribute("opacity", "0");
+          text.textContent = cat;
+          svg.appendChild(text);
+          if (lit && descriptors.length) {
+            const descR = (innerR + outerR) / 2;
+            const descPos = rad2xy(midRad, descR);
+            const descText = document.createElementNS("http://www.w3.org/2000/svg", "text");
+            descText.setAttribute("x", descPos.x);
+            descText.setAttribute("y", descPos.y);
+            descText.setAttribute("text-anchor", "middle");
+            descText.setAttribute("dominant-baseline", "middle");
+            descText.setAttribute("fill", "#e6e6e8");
+            descText.setAttribute("font-size", "7");
+            descText.setAttribute("opacity", "0");
+            descText.textContent = descriptors.slice(0, 3).join(", ") + (descriptors.length > 3 ? "…" : "");
+            svg.appendChild(descText);
+          }
+        }
+        wheelFan.appendChild(svg);
+
+        const durationMs = 650;
+        const start = performance.now();
+        function tick(now) {
+          const elapsed = now - start;
+          const t = elapsed >= durationMs ? 1 : (elapsed / durationMs);
+          const ease = 1 - Math.pow(1 - t, 1.5);
+          paths.forEach(function (item) {
+            const a0 = item.midRad - item.halfSpan * ease;
+            const a1 = item.midRad + item.halfSpan * ease;
+            item.path.setAttribute("d", segmentPath(a0, a1));
+          });
+          if (t < 1) {
+            requestAnimationFrame(tick);
+          } else {
+            svg.querySelectorAll("text").forEach(function (el) { el.setAttribute("opacity", "1"); });
+          }
+        }
+        requestAnimationFrame(tick);
+      }
+
+      function drawRadar(radar) {
+        if (!radar || !radar.length) return;
+        const cx = 130;
+        const cy = 130;
+        const maxR = 100;
+        const minR = 8;
+        const n = radar.length;
+        const scale = (score) => {
+          const v = Math.max(0, Math.min(5, score || 0));
+          return minR + (v / 5) * (maxR - minR);
+        };
+
+        radarSvg.innerHTML = "";
+
+        for (let level = 1; level <= 5; level++) {
+          const r = minR + (level / 5) * (maxR - minR);
+          const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+          circle.setAttribute("cx", cx);
+          circle.setAttribute("cy", cy);
+          circle.setAttribute("r", r);
+          circle.setAttribute("fill", "none");
+          circle.setAttribute("stroke", "rgba(255,255,255,0.1)");
+          circle.setAttribute("stroke-width", "0.5");
+          radarSvg.appendChild(circle);
+        }
+
+        const targetPoints = [];
+        for (let i = 0; i < n; i++) {
+          const angle = (i / n) * 2 * Math.PI - Math.PI / 2;
+          const r = scale(radar[i].score);
+          targetPoints.push({ x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) });
+          const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+          line.setAttribute("x1", cx);
+          line.setAttribute("y1", cy);
+          line.setAttribute("x2", cx + maxR * Math.cos(angle));
+          line.setAttribute("y2", cy + maxR * Math.sin(angle));
+          line.setAttribute("stroke", "rgba(255,255,255,0.12)");
+          line.setAttribute("stroke-width", "0.5");
+          radarSvg.appendChild(line);
+          const labelR = maxR + 16;
+          const lx = cx + labelR * Math.cos(angle);
+          const ly = cy + labelR * Math.sin(angle);
+          const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+          text.setAttribute("x", lx);
+          text.setAttribute("y", ly);
+          text.setAttribute("text-anchor", "middle");
+          text.setAttribute("dominant-baseline", "middle");
+          text.setAttribute("fill", "#8a8a8e");
+          text.setAttribute("font-size", "9");
+          text.textContent = radar[i].name;
+          radarSvg.appendChild(text);
+        }
+
+        const polygon = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        polygon.setAttribute("fill", "rgba(107,144,128,0.22)");
+        polygon.setAttribute("stroke", "rgba(107,144,128,0.85)");
+        polygon.setAttribute("stroke-width", "2");
+        polygon.setAttribute("stroke-linejoin", "round");
+        polygon.setAttribute("stroke-linecap", "round");
+        polygon.setAttribute("class", "radar-polygon");
+        radarSvg.appendChild(polygon);
+
+        function setPath(t) {
+          const points = targetPoints.map(function (p) {
+            return { x: cx + (p.x - cx) * t, y: cy + (p.y - cy) * t };
+          });
+          const d = points.map((p, i) => (i === 0 ? "M" : "L") + p.x + "," + p.y).join(" ") + " Z";
+          polygon.setAttribute("d", d);
+        }
+
+        setPath(0);
+        const durationMs = 1000;
+        function startRadarAnimation() {
+          const start = performance.now();
+          function tick(now) {
+            const elapsed = now - start;
+            const t = elapsed >= durationMs ? 1 : (elapsed / durationMs);
+            const ease = 1 - Math.pow(1 - t, 2);
+            setPath(ease);
+            if (t < 1) requestAnimationFrame(tick);
+          }
+          requestAnimationFrame(tick);
+        }
+        requestAnimationFrame(function () {
+          requestAnimationFrame(startRadarAnimation);
+        });
+      }
+
+      function drawLegend(wheelFlavors, radar) {
+        wheelLegend.innerHTML = "";
+        const byCat = aggregateWheelFlavors(wheelFlavors);
+        WHEEL_CATEGORIES.forEach(function (cat) {
+          const desc = byCat[cat];
+          if (desc && desc.length) {
+            const span = document.createElement("span");
+            span.className = "legend-wheel";
+            span.innerHTML = '<span class="dot" style="background:' + (WHEEL_COLORS[cat] || "#888") + '"></span> ' + cat + ": " + desc.join(", ");
+            wheelLegend.appendChild(span);
+          }
+        });
+        if (radar && radar.length) {
+          const span = document.createElement("span");
+          span.className = "legend-radar";
+          span.innerHTML = "Radar: " + radar.map(function (r) { return r.name + " " + r.score + "/5"; }).join(" · ");
+          wheelLegend.appendChild(span);
+        }
+      }
+
+      function renderResult(data) {
+        transcriptionEl.textContent = data.transcription || "(no transcription)";
+        textSummaryEl.textContent = data.text_summary || "(no summary)";
+        const wheelFlavors = data.wheel_flavors || [];
+        const radar = data.radar || [];
+        drawTastingWheel(wheelFlavors);
+        drawRadar(radar);
+        drawLegend(wheelFlavors, radar);
+        resultEl.hidden = false;
+      }
+
+      function showCaptureView() {
+        captureView.hidden = false;
+        repertoireView.hidden = true;
+        navCapture.classList.add("active");
+        navRepertoire.classList.remove("active");
+      }
+
+      function showRepertoireView() {
+        captureView.hidden = true;
+        repertoireView.hidden = false;
+        navCapture.classList.remove("active");
+        navRepertoire.classList.add("active");
+        repertoireList.hidden = false;
+        repertoireBack.hidden = true;
+        resultEl.hidden = true;
+        loadRepertoireList();
+      }
+
+      async function loadRepertoireList() {
+        repertoireList.innerHTML = "";
+        setStatus("Loading repertoire…");
+        try {
+          const res = await fetch("/api/notes");
+          if (!res.ok) throw new Error("Failed to load notes");
+          const data = await res.json();
+          const notes = data.notes || [];
+          setStatus("");
+          if (notes.length === 0) {
+            repertoireList.innerHTML = "<p style='color:#8a8a8e;font-size:0.9rem;'>No notes yet. Capture a tasting to see it here.</p>";
+            return;
+          }
+          const ul = document.createElement("ul");
+          ul.className = "repertoire-list";
+          notes.forEach(function (note) {
+            const li = document.createElement("li");
+            li.dataset.id = note.id;
+            const title = (note.product_name && note.product_name.trim()) ? note.product_name.trim() : note.snippet || "(No title)";
+            const date = note.created_at ? new Date(note.created_at).toLocaleDateString(undefined, { dateStyle: "medium" }) : "";
+            li.innerHTML = "<span class=\"note-title\">" + escapeHtml(title) + "</span><br><span class=\"note-meta\">" + escapeHtml(date) + "</span>";
+            li.addEventListener("click", function () { openNote(note.id); });
+            ul.appendChild(li);
+          });
+          repertoireList.appendChild(ul);
+        } catch (err) {
+          setStatus(err.message || "Could not load list.", true);
+        }
+      }
+
+      function escapeHtml(s) {
+        if (!s) return "";
+        const div = document.createElement("div");
+        div.textContent = s;
+        return div.innerHTML;
+      }
+
+      async function openNote(noteId) {
+        setStatus("Loading…");
+        try {
+          const res = await fetch("/api/notes/" + encodeURIComponent(noteId));
+          if (!res.ok) throw new Error(res.status === 404 ? "Note not found" : "Failed to load note");
+          const data = await res.json();
+          setStatus("");
+          repertoireList.hidden = true;
+          repertoireBack.hidden = false;
+          renderResult(data);
+        } catch (err) {
+          setStatus(err.message || "Could not load note.", true);
+        }
+      }
+
+      async function sendAudioBlob(wavBlob) {
+        if (!wavBlob || wavBlob.size < 1000) {
+          setStatus("No audio to send (record at least a second).", true);
+          return;
+        }
+        manualStopBtn.disabled = true;
+        captureBtn.disabled = true;
+        setStatus("Sending and processing…");
+        resultEl.hidden = true;
+        try {
+          const formData = new FormData();
+          formData.append("audio", wavBlob, "capture.wav");
+          const res = await fetch("/api/capture", { method: "POST", body: formData });
+          if (!res.ok) {
+            const err = await res.text();
+            let msg = "Request failed: " + res.status;
+            if (err && err.trim()) {
+              try {
+                const j = JSON.parse(err);
+                if (j.detail) msg = j.detail;
+                else msg = err.trim();
+              } catch (_) {
+                msg = err.trim();
+              }
+            }
+            throw new Error(msg);
+          }
+          const data = await res.json();
+          renderResult(data);
+          setStatus("Done.");
+        } catch (err) {
+          setStatus(err.message || "Something went wrong.", true);
+        } finally {
+          captureBtn.disabled = !buffer;
+          manualStopBtn.disabled = manualRecording;
+        }
+      }
+
+      async function captureAndSend() {
+        if (!buffer) {
+          setStatus("Start 30s buffer first, then capture.", true);
+          return;
+        }
+        const wavBlob = buildWAVBlob();
+        await sendAudioBlob(wavBlob);
+      }
+
+      async function manualStopAndSend() {
+        if (!manualRecording) return;
+        if (manualScriptNode) manualScriptNode.disconnect();
+        if (manualStream) manualStream.getTracks().forEach(function (t) { t.stop(); });
+        manualScriptNode = null;
+        manualStream = null;
+        manualRecording = false;
+        manualStartBtn.disabled = false;
+        const chunks = manualChunks;
+        manualChunks = [];
+        const wavBlob = buildWAVBlobFromChunks(chunks);
+        await sendAudioBlob(wavBlob);
+        manualStopBtn.disabled = true;
+        startBtn.disabled = false;
+        captureBtn.disabled = !buffer;
+      }
+
+      navCapture.addEventListener("click", function (e) { e.preventDefault(); showCaptureView(); });
+      navRepertoire.addEventListener("click", function (e) { e.preventDefault(); showRepertoireView(); });
+      document.getElementById("backToList").addEventListener("click", function (e) {
+        e.preventDefault();
+        repertoireList.hidden = false;
+        repertoireBack.hidden = true;
+        resultEl.hidden = true;
+        loadRepertoireList();
+      });
+
+      startBtn.addEventListener("click", function () {
+        if (isRecording) stopRecording();
+        else startRecording().then(function () { if (isRecording) captureBtn.focus(); });
+      });
+      captureBtn.addEventListener("click", captureAndSend);
+      manualStartBtn.addEventListener("click", startManualRecording);
+      manualStopBtn.addEventListener("click", manualStopAndSend);
+      window.addEventListener("beforeunload", function () {
+        stopRecording();
+        if (manualRecording) {
+          if (manualScriptNode) manualScriptNode.disconnect();
+          if (manualStream) manualStream.getTracks().forEach(function (t) { t.stop(); });
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
