@@ -313,22 +313,16 @@
   <script>
     (function () {
       const CAPTURE_DURATION_SEC = 30;
-      const SAMPLE_RATE = 44100;
-      const BUFFER_LENGTH = CAPTURE_DURATION_SEC * SAMPLE_RATE;
+      const MANUAL_MAX_SEC = 5 * 60;
 
-      let audioContext = null;
-      let buffer = null;
-      let writeIndex = 0;
       let stream = null;
-      let scriptNode = null;
+      let recorder = null;
       let isRecording = false;
-
-      let manualRecording = false;
-      let manualStream = null;
-      let manualContext = null;
-      let manualScriptNode = null;
-      let manualChunks = [];
-      const MANUAL_MAX_SAMPLES = 5 * 60 * SAMPLE_RATE;
+      let chunks = [];
+      let rollingMode = false;
+      let manualMode = false;
+      let manualSeconds = 0;
+      let manualTimer = null;
 
       const startBtn = document.getElementById("startBtn");
       const captureBtn = document.getElementById("captureBtn");
@@ -366,90 +360,59 @@
         statusEl.classList.toggle("error", !!isError);
       }
 
-      function floatTo16BitPCM(float32Array) {
-        const int16 = new Int16Array(float32Array.length);
-        for (let i = 0; i < float32Array.length; i++) {
-          const s = Math.max(-1, Math.min(1, float32Array[i]));
-          int16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+      function pickMimeType() {
+        const candidates = [
+          "audio/webm;codecs=opus",
+          "audio/webm",
+          "audio/ogg;codecs=opus",
+          "audio/ogg",
+        ];
+        for (let i = 0; i < candidates.length; i++) {
+          const t = candidates[i];
+          if (window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) return t;
         }
-        return int16;
+        return "";
       }
 
-      function writeWAVHeader(dataView, numChannels, sampleRate, dataSize) {
-        const blockAlign = numChannels * 2;
-        const byteRate = sampleRate * blockAlign;
-        function writeStr(off, str) {
-          for (let i = 0; i < str.length; i++) dataView.setUint8(off + i, str.charCodeAt(i));
-        }
-        writeStr(0, "RIFF");
-        dataView.setUint32(4, 36 + dataSize - 8, true);
-        writeStr(8, "WAVE");
-        writeStr(12, "fmt ");
-        dataView.setUint32(16, 16, true);
-        dataView.setUint16(20, 1, true);
-        dataView.setUint16(22, numChannels, true);
-        dataView.setUint32(24, sampleRate, true);
-        dataView.setUint32(28, byteRate, true);
-        dataView.setUint16(32, blockAlign, true);
-        dataView.setUint16(34, 16, true);
-        writeStr(36, "data");
-        dataView.setUint32(40, dataSize, true);
+      function extForMime(mime) {
+        const m = (mime || "").toLowerCase();
+        if (m.indexOf("webm") !== -1) return "webm";
+        if (m.indexOf("ogg") !== -1) return "ogg";
+        return "webm";
       }
 
-      function buildWAVBlob() {
-        if (!buffer) return null;
-        const samples = new Float32Array(BUFFER_LENGTH);
-        for (let i = 0; i < BUFFER_LENGTH; i++) {
-          const idx = (writeIndex + i) % BUFFER_LENGTH;
-          samples[i] = buffer[idx];
-        }
-        const pcm = floatTo16BitPCM(samples);
-        const dataSize = pcm.length * 2;
-        const fullBuffer = new ArrayBuffer(44 + dataSize);
-        const fullView = new DataView(fullBuffer);
-        writeWAVHeader(fullView, 1, SAMPLE_RATE, dataSize);
-        new Int16Array(fullBuffer, 44).set(pcm);
-        return new Blob([fullBuffer], { type: "audio/wav" });
+      async function ensureStream() {
+        if (stream) return stream;
+        setStatus("Requesting microphone…");
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        return stream;
       }
 
-      function buildWAVBlobFromChunks(chunks) {
-        if (!chunks || chunks.length === 0) return null;
-        let totalLen = 0;
-        for (let i = 0; i < chunks.length; i++) totalLen += chunks[i].length;
-        const combined = new Float32Array(totalLen);
-        let offset = 0;
-        for (let i = 0; i < chunks.length; i++) {
-          combined.set(chunks[i], offset);
-          offset += chunks[i].length;
-        }
-        const pcm = floatTo16BitPCM(combined);
-        const dataSize = pcm.length * 2;
-        const fullBuffer = new ArrayBuffer(44 + dataSize);
-        const fullView = new DataView(fullBuffer);
-        writeWAVHeader(fullView, 1, SAMPLE_RATE, dataSize);
-        new Int16Array(fullBuffer, 44).set(pcm);
-        return new Blob([fullBuffer], { type: "audio/wav" });
+      function stopRecorder() {
+        try { if (recorder && recorder.state !== "inactive") recorder.stop(); } catch (_) {}
+        recorder = null;
+      }
+
+      function stopStreamTracks() {
+        if (stream) stream.getTracks().forEach(function (t) { try { t.stop(); } catch (_) {} });
+        stream = null;
       }
 
       async function startRecording() {
-        if (isRecording) return;
+        if (isRecording || manualMode) return;
         try {
-          setStatus("Requesting microphone…");
-          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
-          buffer = new Float32Array(BUFFER_LENGTH);
-          writeIndex = 0;
-          const source = audioContext.createMediaStreamSource(stream);
-          scriptNode = audioContext.createScriptProcessor(4096, 1, 1);
-          scriptNode.onaudioprocess = function (e) {
-            const input = e.inputBuffer.getChannelData(0);
-            for (let i = 0; i < input.length; i++) {
-              buffer[writeIndex] = input[i];
-              writeIndex = (writeIndex + 1) % BUFFER_LENGTH;
+          await ensureStream();
+          const mime = pickMimeType();
+          chunks = [];
+          rollingMode = true;
+          recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+          recorder.ondataavailable = function (e) {
+            if (e.data && e.data.size > 0) {
+              chunks.push(e.data);
+              while (chunks.length > CAPTURE_DURATION_SEC) chunks.shift(); // 1 chunk/sec
             }
           };
-          source.connect(scriptNode);
-          scriptNode.connect(audioContext.destination);
+          recorder.start(1000);
           isRecording = true;
           startBtn.textContent = "⏹ Stop 30s buffer";
           captureBtn.disabled = false;
@@ -462,12 +425,11 @@
 
       function stopRecording() {
         if (!isRecording) return;
-        if (scriptNode) scriptNode.disconnect();
-        if (stream) stream.getTracks().forEach(function (t) { t.stop(); });
-        scriptNode = null;
-        stream = null;
-        buffer = null;
+        stopRecorder();
+        stopStreamTracks();
+        chunks = [];
         isRecording = false;
+        rollingMode = false;
         startBtn.textContent = "▶ Start 30s buffer";
         captureBtn.disabled = true;
         setStatus("Stopped. Start 30s buffer to try again.");
@@ -475,24 +437,27 @@
       }
 
       async function startManualRecording() {
-        if (manualRecording || isRecording) return;
+        if (manualMode || isRecording) return;
         try {
-          setStatus("Requesting microphone…");
-          manualStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          manualContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
-          manualChunks = [];
-          const source = manualContext.createMediaStreamSource(manualStream);
-          manualScriptNode = manualContext.createScriptProcessor(4096, 1, 1);
-          manualScriptNode.onaudioprocess = function (e) {
-            const input = e.inputBuffer.getChannelData(0);
-            let total = 0;
-            for (let i = 0; i < manualChunks.length; i++) total += manualChunks[i].length;
-            if (total + input.length > MANUAL_MAX_SAMPLES) return;
-            manualChunks.push(new Float32Array(input));
+          await ensureStream();
+          const mime = pickMimeType();
+          chunks = [];
+          manualMode = true;
+          manualSeconds = 0;
+          recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+          recorder.ondataavailable = function (e) {
+            if (e.data && e.data.size > 0) chunks.push(e.data);
           };
-          source.connect(manualScriptNode);
-          manualScriptNode.connect(manualContext.destination);
-          manualRecording = true;
+          recorder.start(1000);
+          manualTimer = setInterval(function () {
+            manualSeconds += 1;
+            if (manualSeconds >= MANUAL_MAX_SEC) {
+              clearInterval(manualTimer);
+              manualTimer = null;
+              setStatus("Max 5 min reached. Sending…");
+              manualStopAndSend();
+            }
+          }, 1000);
           manualStartBtn.disabled = true;
           manualStopBtn.disabled = false;
           startBtn.disabled = true;
@@ -504,16 +469,15 @@
       }
 
       function stopManualRecording() {
-        if (!manualRecording) return;
-        if (manualScriptNode) manualScriptNode.disconnect();
-        if (manualStream) manualStream.getTracks().forEach(function (t) { t.stop(); });
-        manualScriptNode = null;
-        manualStream = null;
-        manualRecording = false;
+        if (!manualMode) return;
+        if (manualTimer) { clearInterval(manualTimer); manualTimer = null; }
+        stopRecorder();
+        stopStreamTracks();
+        manualMode = false;
         manualStartBtn.disabled = false;
         manualStopBtn.disabled = true;
         startBtn.disabled = false;
-        captureBtn.disabled = !buffer;
+        captureBtn.disabled = true;
       }
 
       // Aggregate wheel_flavors by category: { categoryName: [descriptor1, descriptor2, ...] }
@@ -811,7 +775,7 @@
       }
 
       async function sendAudioBlob(wavBlob) {
-        if (!wavBlob || wavBlob.size < 1000) {
+        if (!wavBlob || wavBlob.size < 500) {
           setStatus("No audio to send (record at least a second).", true);
           return;
         }
@@ -821,7 +785,8 @@
         resultEl.hidden = true;
         try {
           const formData = new FormData();
-          formData.append("audio", wavBlob, "capture.wav");
+          const ext = extForMime(wavBlob.type);
+          formData.append("audio", wavBlob, "capture." + ext);
           const res = await fetch("/api/capture", { method: "POST", body: formData });
           if (!res.ok) {
             const err = await res.text();
@@ -843,35 +808,35 @@
         } catch (err) {
           setStatus(err.message || "Something went wrong.", true);
         } finally {
-          captureBtn.disabled = !buffer;
-          manualStopBtn.disabled = manualRecording;
+          captureBtn.disabled = !isRecording;
+          manualStopBtn.disabled = manualMode;
         }
       }
 
       async function captureAndSend() {
-        if (!buffer) {
+        if (!isRecording || !rollingMode || !chunks.length) {
           setStatus("Start 30s buffer first, then capture.", true);
           return;
         }
-        const wavBlob = buildWAVBlob();
-        await sendAudioBlob(wavBlob);
+        const mime = (recorder && recorder.mimeType) ? recorder.mimeType : (chunks[0] && chunks[0].type) || "audio/webm";
+        const blob = new Blob(chunks.slice(0), { type: mime });
+        await sendAudioBlob(blob);
       }
 
       async function manualStopAndSend() {
-        if (!manualRecording) return;
-        if (manualScriptNode) manualScriptNode.disconnect();
-        if (manualStream) manualStream.getTracks().forEach(function (t) { t.stop(); });
-        manualScriptNode = null;
-        manualStream = null;
-        manualRecording = false;
+        if (!manualMode) return;
+        if (manualTimer) { clearInterval(manualTimer); manualTimer = null; }
+        stopRecorder();
+        stopStreamTracks();
+        manualMode = false;
         manualStartBtn.disabled = false;
-        const chunks = manualChunks;
-        manualChunks = [];
-        const wavBlob = buildWAVBlobFromChunks(chunks);
-        await sendAudioBlob(wavBlob);
+        const mime = (recorder && recorder.mimeType) ? recorder.mimeType : (chunks[0] && chunks[0].type) || "audio/webm";
+        const blob = new Blob(chunks.slice(0), { type: mime });
+        chunks = [];
+        await sendAudioBlob(blob);
         manualStopBtn.disabled = true;
         startBtn.disabled = false;
-        captureBtn.disabled = !buffer;
+        captureBtn.disabled = true;
       }
 
       navCapture.addEventListener("click", function (e) { e.preventDefault(); showCaptureView(); });
@@ -893,10 +858,7 @@
       manualStopBtn.addEventListener("click", manualStopAndSend);
       window.addEventListener("beforeunload", function () {
         stopRecording();
-        if (manualRecording) {
-          if (manualScriptNode) manualScriptNode.disconnect();
-          if (manualStream) manualStream.getTracks().forEach(function (t) { t.stop(); });
-        }
+        stopManualRecording();
       });
     })();
   </script>

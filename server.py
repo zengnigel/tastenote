@@ -253,7 +253,13 @@ async def capture_tasting(request: Request, audio: UploadFile = File(...)):
         log(f"[Capture] Upload: filename={getattr(audio, 'filename', '?')}, content_type={getattr(audio, 'content_type', '?')}")
         client = get_client(base_url)
 
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+        filename = getattr(audio, "filename", "") or "capture"
+        suffix = Path(filename).suffix
+        if not suffix or len(suffix) > 8:
+            # Default to .webm because MediaRecorder commonly produces webm/opus; Whisper also accepts it.
+            suffix = ".webm"
+
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
             content = await audio.read()
             tmp.write(content)
             tmp_path = tmp.name

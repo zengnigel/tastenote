@@ -34,7 +34,7 @@ Open http://127.0.0.1:8000
    git push -u origin main
    ```
 
-3. **Deploy** via the platform API or Deployment Portal with:
+3. **Deploy** — done by the AI agent (not manually). The agent calls `POST /v1/deployments` with repo URL, service name, and branch. Parameters:
    - **Repo URL**: `https://github.com/zengnigel/tastenote`
    - **Service name**: `tastenote` (becomes `https://tastenote.ai-builders.space`)
    - **Branch**: `main`
