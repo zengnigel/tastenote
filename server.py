@@ -171,6 +171,13 @@ def _build_wheel_prompt() -> str:
     return "\n".join(lines)
 
 
+def _first_line(s: str) -> str:
+    s = (s or "").strip()
+    if not s:
+        return ""
+    return s.split("\n")[0].strip()
+
+
 def _load_notes() -> list:
     """Load notes from JSON file; return list (newest first)."""
     if not NOTES_FILE.exists():
@@ -217,14 +224,17 @@ def list_notes():
     notes = _load_notes()
     out = []
     for n in notes:
-        summary = (n.get("text_summary") or "").strip()
-        first_line = summary.split("\n")[0].strip() if summary else ""
-        snippet = (first_line[:80] + "…") if len(first_line) > 80 else first_line
+        first_line_en = _first_line(n.get("text_summary_en") or n.get("text_summary") or "")
+        first_line_zh = _first_line(n.get("text_summary_zh") or n.get("text_summary") or "")
+        snippet_en = (first_line_en[:80] + "…") if len(first_line_en) > 80 else first_line_en
+        snippet_zh = (first_line_zh[:80] + "…") if len(first_line_zh) > 80 else first_line_zh
         out.append({
             "id": n.get("id", ""),
             "created_at": n.get("created_at", ""),
             "product_name": n.get("product_name"),
-            "snippet": snippet or "(No summary)",
+            "snippet_en": snippet_en or "(No summary)",
+            "snippet_zh": snippet_zh or "(没有摘要)",
+            "snippet": snippet_en or snippet_zh or "(No summary)",
         })
     log(f"[GET /api/notes] Returning {len(out)} notes")
     return {"notes": out}
@@ -304,9 +314,21 @@ Your tasks:
 
 1. If the speaker clearly mentions a specific wine, spirit, or bottle name (e.g. "Glenfiddich 12", "Barolo 2019"), set "product_name" to that name (a short string). Otherwise set "product_name" to null.
 
-2. Write a brief "text_summary" (2–4 sentences) that captures the tasting note in clear prose.
+2. Write two summaries of the same content:
+   - "text_summary_en": English (2–4 sentences, clear prose)
+   - "text_summary_zh": Mandarin Chinese in Simplified Chinese characters (2–4 sentences, clear prose)
+   The two summaries should convey the same meaning.
 
-3. Extract every specific flavor or aroma descriptor the speaker mentioned (e.g. raisin, vanilla, smoke, honey). For each descriptor, assign it to ONE category and ONE subcategory from the list below. Put the exact word or short phrase the speaker used into "descriptors". If the speaker said something that fits under "Fruity" → "Dried Fruit", add {{"category": "Fruity", "subcategory": "Dried Fruit", "descriptors": ["Raisin"]}} (use the descriptor they said, e.g. Raisin). You may have multiple entries for the same category/subcategory if they mentioned several things. Only include categories/subcategories that were actually mentioned.
+3. Extract every specific flavor or aroma descriptor the speaker mentioned (e.g. raisin, vanilla, smoke, honey).
+   For each descriptor, assign it to ONE category and ONE subcategory from the list below.
+   Return two descriptor languages per wheel entry:
+   - "descriptors_en": descriptor values in English
+   - "descriptors_zh": descriptor values in Simplified Chinese characters
+
+   If the speaker said something that fits under "Fruity" → "Dried Fruit", add:
+   {{"category": "Fruity", "subcategory": "Dried Fruit", "descriptors_en": ["Raisin"], "descriptors_zh": ["葡萄干"]}}
+
+   You may have multiple entries for the same category/subcategory if they mentioned several things. Only include categories/subcategories that were actually mentioned.
 
 {wheel_guide}
 
@@ -315,9 +337,10 @@ Your tasks:
 Return ONLY a single JSON object with this exact shape (no markdown, no explanation):
 {{
   "product_name": "Glenfiddich 12" or null,
-  "text_summary": "...",
+  "text_summary_en": "...",
+  "text_summary_zh": "...",
   "wheel_flavors": [
-    {{"category": "Fruity", "subcategory": "Dried Fruit", "descriptors": ["Raisin", "Fig"]}},
+    {{"category": "Fruity", "subcategory": "Dried Fruit", "descriptors_en": ["Raisin", "Fig"], "descriptors_zh": ["葡萄干", "无花果"]}},
     ...
   ],
   "radar": [
@@ -358,7 +381,12 @@ Use the category and subcategory names exactly as in the list. Include all radar
         product_name = None
     if product_name is not None:
         product_name = (product_name or "").strip() or None
-    text_summary = parsed.get("text_summary") or "(No summary generated.)"
+    text_summary_en = parsed.get("text_summary_en") or parsed.get("text_summary") or "(No English summary generated.)"
+    text_summary_zh = parsed.get("text_summary_zh") or "(无摘要生成。)"
+    if not isinstance(text_summary_en, str):
+        text_summary_en = "(No English summary generated.)"
+    if not isinstance(text_summary_zh, str):
+        text_summary_zh = "(无摘要生成。)"
     wheel_flavors = parsed.get("wheel_flavors")
     if not isinstance(wheel_flavors, list):
         log(f"[Capture] wheel_flavors invalid (type={type(wheel_flavors).__name__}), using []")
@@ -374,9 +402,35 @@ Use the category and subcategory names exactly as in the list. Include all radar
     log(f"[Capture] Result: product_name={product_name!r}, wheel_flavors count={len(wheel_flavors)}, radar={[r['score'] for r in radar]}")
     if wheel_flavors:
         for i, w in enumerate(wheel_flavors[:10]):
-            log(f"[Capture]   wheel_flavors[{i}] {w.get('category')} / {w.get('subcategory')} -> {w.get('descriptors', [])}")
+            log(
+                f"[Capture]   wheel_flavors[{i}] {w.get('category')} / {w.get('subcategory')} -> "
+                f"en={w.get('descriptors_en', w.get('descriptors', []))}, zh={w.get('descriptors_zh', [])}"
+            )
         if len(wheel_flavors) > 10:
             log(f"[Capture]   ... and {len(wheel_flavors) - 10} more")
+
+    # Normalize wheel_flavors: ensure descriptor language arrays exist.
+    normalized_wheel_flavors = []
+    for w in wheel_flavors:
+        if not isinstance(w, dict):
+            continue
+        descriptors_en = w.get("descriptors_en") or w.get("descriptors") or []
+        descriptors_zh = w.get("descriptors_zh") or []
+        if not isinstance(descriptors_en, list):
+            descriptors_en = []
+        if not isinstance(descriptors_zh, list):
+            descriptors_zh = []
+
+        entry = {
+            "category": w.get("category"),
+            "subcategory": w.get("subcategory"),
+            "descriptors_en": descriptors_en,
+            "descriptors_zh": descriptors_zh,
+            # Backward-compatible alias used by older frontend code.
+            "descriptors": descriptors_en,
+        }
+        normalized_wheel_flavors.append(entry)
+    wheel_flavors = normalized_wheel_flavors
 
     note_id = str(uuid.uuid4())
     created_at = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -385,7 +439,9 @@ Use the category and subcategory names exactly as in the list. Include all radar
         "created_at": created_at,
         "product_name": product_name,
         "transcription": transcription,
-        "text_summary": text_summary,
+        "text_summary": text_summary_en,  # backward-compatible alias
+        "text_summary_en": text_summary_en,
+        "text_summary_zh": text_summary_zh,
         "wheel_flavors": wheel_flavors,
         "radar": radar,
     }
@@ -399,7 +455,9 @@ Use the category and subcategory names exactly as in the list. Include all radar
         "created_at": created_at,
         "product_name": product_name,
         "transcription": transcription,
-        "text_summary": text_summary,
+        "text_summary": text_summary_en,  # backward-compatible alias
+        "text_summary_en": text_summary_en,
+        "text_summary_zh": text_summary_zh,
         "wheel_flavors": wheel_flavors,
         "radar": radar,
         "wheel_categories": WHEEL_CATEGORIES,

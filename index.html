@@ -28,6 +28,27 @@
       color: var(--text);
       text-align: center;
     }
+    .top-actions {
+      position: absolute;
+      top: 1rem;
+      right: 1rem;
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      justify-content: flex-end;
+    }
+    .lang-toggle {
+      padding: 0.35rem 0.6rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text);
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--border);
+      border-radius: 0.6rem;
+      cursor: pointer;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .lang-toggle:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.14); }
     .header {
       display: flex;
       flex-direction: column;
@@ -271,6 +292,9 @@
   </style>
 </head>
 <body>
+  <div class="top-actions">
+    <button type="button" class="lang-toggle" id="langToggle" aria-label="Toggle language">EN</button>
+  </div>
   <div class="header">
     <span class="header-icon" aria-hidden="true">🍷</span>
     <h1>Tastenote</h1>
@@ -282,9 +306,9 @@
   </nav>
   <div id="captureView">
   <div class="buttons">
-    <button type="button" class="start-btn" id="startBtn">▶ Start 30s buffer</button>
-    <button type="button" class="capture-btn" id="captureBtn" disabled>Capture last 30s</button>
-    <p class="mode-label">Or take your time</p>
+    <button type="button" class="start-btn" id="startBtn" hidden>▶ Start 30s buffer</button>
+    <button type="button" class="capture-btn" id="captureBtn" disabled hidden>Capture last 30s</button>
+    <p class="mode-label">Record when ready</p>
     <button type="button" class="manual-btn manual-start" id="manualStartBtn">▶ Start manual record</button>
     <button type="button" class="manual-btn manual-stop" id="manualStopBtn" disabled>⏹ Stop & send</button>
   </div>
@@ -324,6 +348,9 @@
       let manualSeconds = 0;
       let manualTimer = null;
 
+      let uiLang = (localStorage.getItem("uiLang") || "en").toLowerCase();
+      let lastResultData = null;
+
       const startBtn = document.getElementById("startBtn");
       const captureBtn = document.getElementById("captureBtn");
       const manualStartBtn = document.getElementById("manualStartBtn");
@@ -341,6 +368,7 @@
       const repertoireBack = document.getElementById("repertoireBack");
       const navCapture = document.getElementById("navCapture");
       const navRepertoire = document.getElementById("navRepertoire");
+      const langToggle = document.getElementById("langToggle");
 
       // 8 categories (Whisky Magazine / Council of Whiskey Masters style). See NOTES.md.
       const WHEEL_CATEGORIES = ["Cereal", "Fruity", "Floral", "Peaty", "Feinty", "Sulphury", "Woody", "Winey"];
@@ -353,6 +381,29 @@
         Sulphury: "#8b7355",
         Woody: "#5c4033",
         Winey: "#8b3a62",
+      };
+
+      const WHEEL_LABELS = {
+        en: {
+          Cereal: "Cereal",
+          Fruity: "Fruity",
+          Floral: "Floral",
+          Peaty: "Peaty",
+          Feinty: "Feinty",
+          Sulphury: "Sulphury",
+          Woody: "Woody",
+          Winey: "Winey",
+        },
+        zh: {
+          Cereal: "穀物",
+          Fruity: "果香",
+          Floral: "花香",
+          Peaty: "泥煤",
+          Feinty: "雜味",
+          Sulphury: "硫磺",
+          Woody: "木質",
+          Winey: "酒香",
+        },
       };
 
       function setStatus(text, isError) {
@@ -487,7 +538,9 @@
         (wheelFlavors || []).forEach(function (entry) {
           const cat = entry.category;
           if (!byCat[cat]) byCat[cat] = [];
-          (entry.descriptors || []).forEach(function (d) {
+          const descField = uiLang === "zh" ? "descriptors_zh" : "descriptors_en";
+          const descriptors = entry[descField] || entry.descriptors || [];
+          (descriptors || []).forEach(function (d) {
             if (d && byCat[cat].indexOf(d) === -1) byCat[cat].push(d);
           });
         });
@@ -546,7 +599,8 @@
           text.setAttribute("font-size", "9");
           text.setAttribute("font-weight", lit ? "600" : "400");
           text.setAttribute("opacity", "0");
-          text.textContent = cat;
+          const catLabel = uiLang === "zh" ? (WHEEL_LABELS.zh[cat] || cat) : (WHEEL_LABELS.en[cat] || cat);
+          text.textContent = catLabel;
           svg.appendChild(text);
           if (lit && descriptors.length) {
             const descR = (innerR + outerR) / 2;
@@ -681,7 +735,8 @@
           if (desc && desc.length) {
             const span = document.createElement("span");
             span.className = "legend-wheel";
-            span.innerHTML = '<span class="dot" style="background:' + (WHEEL_COLORS[cat] || "#888") + '"></span> ' + cat + ": " + desc.join(", ");
+            const catLabel = uiLang === "zh" ? (WHEEL_LABELS.zh[cat] || cat) : (WHEEL_LABELS.en[cat] || cat);
+            span.innerHTML = '<span class="dot" style="background:' + (WHEEL_COLORS[cat] || "#888") + '"></span> ' + catLabel + ": " + desc.join(", ");
             wheelLegend.appendChild(span);
           }
         });
@@ -693,9 +748,15 @@
         }
       }
 
+      function getTextSummaryByLang(data) {
+        if (uiLang === "zh") return data.text_summary_zh || data.text_summary || "(no summary)";
+        return data.text_summary_en || data.text_summary || "(no summary)";
+      }
+
       function renderResult(data) {
+        lastResultData = data;
         transcriptionEl.textContent = data.transcription || "(no transcription)";
-        textSummaryEl.textContent = data.text_summary || "(no summary)";
+        textSummaryEl.textContent = getTextSummaryByLang(data);
         const wheelFlavors = data.wheel_flavors || [];
         const radar = data.radar || [];
         drawTastingWheel(wheelFlavors);
@@ -740,7 +801,8 @@
           notes.forEach(function (note) {
             const li = document.createElement("li");
             li.dataset.id = note.id;
-            const title = (note.product_name && note.product_name.trim()) ? note.product_name.trim() : note.snippet || "(No title)";
+            const snippet = uiLang === "zh" ? (note.snippet_zh || note.snippet) : (note.snippet_en || note.snippet);
+            const title = (note.product_name && note.product_name.trim()) ? note.product_name.trim() : snippet || "(No title)";
             const date = note.created_at ? new Date(note.created_at).toLocaleDateString(undefined, { dateStyle: "medium" }) : "";
             li.innerHTML = "<span class=\"note-title\">" + escapeHtml(title) + "</span><br><span class=\"note-meta\">" + escapeHtml(date) + "</span>";
             li.addEventListener("click", function () { openNote(note.id); });
@@ -847,6 +909,25 @@
         repertoireBack.hidden = true;
         resultEl.hidden = true;
         loadRepertoireList();
+      });
+
+      function applyLang() {
+        uiLang = uiLang === "zh" ? "zh" : "en";
+        langToggle.textContent = uiLang === "zh" ? "中文" : "EN";
+        navCapture.textContent = uiLang === "zh" ? "錄音" : "Capture";
+        navRepertoire.textContent = uiLang === "zh" ? "酒單" : "Repertoire";
+        if (lastResultData && !resultEl.hidden) {
+          textSummaryEl.textContent = getTextSummaryByLang(lastResultData);
+          drawTastingWheel(lastResultData.wheel_flavors || []);
+          drawLegend(lastResultData.wheel_flavors || [], lastResultData.radar || []);
+        }
+      }
+      applyLang();
+      langToggle.addEventListener("click", function () {
+        uiLang = uiLang === "zh" ? "en" : "zh";
+        localStorage.setItem("uiLang", uiLang);
+        applyLang();
+        if (!repertoireView.hidden) loadRepertoireList();
       });
 
       startBtn.addEventListener("click", function () {
