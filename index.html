@@ -8,15 +8,16 @@
     /* Theme: neutral dark base + single muted accent (casual, not game-like) */
     * { box-sizing: border-box; }
     :root {
-      --bg: #1e1e20;
-      --bg-subtle: #252528;
+      --bg: #1c1b22;
+      --bg-subtle: #22212a;
       --text: #e6e6e8;
       --text-muted: #8a8a8e;
-      --surface: rgba(255,255,255,0.04);
-      --border: rgba(255,255,255,0.08);
-      --accent: #6b9080;
-      --accent-hover: #7aa092;
-      --accent-muted: rgba(107,144,128,0.25);
+      --surface: rgba(255,255,255,0.055);
+      --border: rgba(255,255,255,0.12);
+      --accent: #9a6dd7;
+      --accent-hover: #b092e6;
+      --accent-muted: rgba(154,109,215,0.25);
+      --accent-border: rgba(154,109,215,0.55);
     }
     body {
       font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
@@ -24,7 +25,9 @@
       margin: 0 auto;
       padding: 1.5rem 1.25rem;
       min-height: 100vh;
-      background: linear-gradient(165deg, var(--bg) 0%, var(--bg-subtle) 50%, var(--bg) 100%);
+      /* More "paper-like": flat background with subtle ambient glow */
+      background: var(--bg);
+      background-image: radial-gradient(1200px circle at 50% -20%, rgba(154, 109, 215, 0.10) 0%, rgba(154, 109, 215, 0) 55%);
       color: var(--text);
       text-align: center;
     }
@@ -90,7 +93,7 @@
       transition: color 0.2s, background 0.2s, border-color 0.2s;
     }
     .nav a:hover { color: var(--text); background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.14); }
-    .nav a.active { color: var(--accent); background: var(--accent-muted); border-color: rgba(107,144,128,0.5); }
+    .nav a.active { color: var(--accent); background: var(--accent-muted); border-color: var(--accent-border); }
     .repertoire-list {
       text-align: left;
       list-style: none;
@@ -191,12 +194,12 @@
     }
     .manual-stop {
       color: #fff;
-      background: #5a7a6e;
+      background: var(--accent);
       border: none;
       transition: background 0.2s, transform 0.1s;
     }
     .manual-stop:hover:not(:disabled) {
-      background: #6b8a7e;
+      background: var(--accent-hover);
       transform: scale(1.01);
     }
     .manual-btn:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -369,6 +372,10 @@
       const navCapture = document.getElementById("navCapture");
       const navRepertoire = document.getElementById("navRepertoire");
       const langToggle = document.getElementById("langToggle");
+      const modeLabelEl = captureView.querySelector(".mode-label");
+      const resultWhatEl = resultEl.querySelector("h2:not(.summary)");
+      const resultSummaryEl = resultEl.querySelector("h2.summary");
+      const backToListLink = document.getElementById("backToList");
 
       // 8 categories (Whisky Magazine / Council of Whiskey Masters style). See NOTES.md.
       const WHEEL_CATEGORIES = ["Cereal", "Fruity", "Floral", "Peaty", "Feinty", "Sulphury", "Woody", "Winey"];
@@ -430,6 +437,26 @@
         if (m.indexOf("webm") !== -1) return "webm";
         if (m.indexOf("ogg") !== -1) return "ogg";
         return "webm";
+      }
+
+      function getAccentHex() {
+        return (getComputedStyle(document.documentElement).getPropertyValue("--accent") || "").trim() || "#9a6dd7";
+      }
+
+      function hexToRgb(hex) {
+        let h = (hex || "").trim();
+        if (h.startsWith("#")) h = h.slice(1);
+        if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+        const n = parseInt(h, 16);
+        const r = (n >> 16) & 255;
+        const g = (n >> 8) & 255;
+        const b = n & 255;
+        return { r: r, g: g, b: b };
+      }
+
+      function accentRGBA(alpha) {
+        const { r, g, b } = hexToRgb(getAccentHex());
+        return "rgba(" + r + "," + g + "," + b + "," + alpha + ")";
       }
 
       async function ensureStream() {
@@ -595,7 +622,7 @@
           text.setAttribute("y", labelPos.y);
           text.setAttribute("text-anchor", "middle");
           text.setAttribute("dominant-baseline", "middle");
-          text.setAttribute("fill", lit ? (WHEEL_COLORS[cat] || "#6b9080") : "#6a6a6e");
+          text.setAttribute("fill", lit ? (WHEEL_COLORS[cat] || getAccentHex()) : "#6a6a6e");
           text.setAttribute("font-size", "9");
           text.setAttribute("font-weight", lit ? "600" : "400");
           text.setAttribute("opacity", "0");
@@ -693,8 +720,8 @@
         }
 
         const polygon = document.createElementNS("http://www.w3.org/2000/svg", "path");
-        polygon.setAttribute("fill", "rgba(107,144,128,0.22)");
-        polygon.setAttribute("stroke", "rgba(107,144,128,0.85)");
+        polygon.setAttribute("fill", accentRGBA(0.22));
+        polygon.setAttribute("stroke", accentRGBA(0.85));
         polygon.setAttribute("stroke-width", "2");
         polygon.setAttribute("stroke-linejoin", "round");
         polygon.setAttribute("stroke-linecap", "round");
@@ -916,6 +943,12 @@
         langToggle.textContent = uiLang === "zh" ? "中文" : "EN";
         navCapture.textContent = uiLang === "zh" ? "錄音" : "Capture";
         navRepertoire.textContent = uiLang === "zh" ? "酒單" : "Repertoire";
+        if (modeLabelEl) modeLabelEl.textContent = uiLang === "zh" ? "录音准备就绪" : "Record when ready";
+        manualStartBtn.textContent = uiLang === "zh" ? "▶ 开始手动录音" : "▶ Start manual record";
+        manualStopBtn.textContent = uiLang === "zh" ? "⏹ 停止并发送" : "⏹ Stop & send";
+        if (backToListLink) backToListLink.textContent = uiLang === "zh" ? "← 返回列表" : "← Back to list";
+        if (resultWhatEl) resultWhatEl.textContent = uiLang === "zh" ? "你说了什么" : "What you said";
+        if (resultSummaryEl) resultSummaryEl.textContent = uiLang === "zh" ? "品鉴摘要" : "Tasting summary";
         if (lastResultData && !resultEl.hidden) {
           textSummaryEl.textContent = getTextSummaryByLang(lastResultData);
           drawTastingWheel(lastResultData.wheel_flavors || []);
