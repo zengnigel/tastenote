@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" id="htmlRoot">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -20,7 +20,7 @@
       --accent-border: rgba(154,109,215,0.55);
     }
     body {
-      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      font-family: "Segoe UI", system-ui, -apple-system, "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
       max-width: 32rem;
       margin: 0 auto;
       padding: 1.5rem 1.25rem;
@@ -300,8 +300,8 @@
   </div>
   <div class="header">
     <span class="header-icon" aria-hidden="true">🍷</span>
-    <h1>Tastenote</h1>
-    <p class="tagline">Say what you taste.</p>
+    <h1 id="appTitle">Tastenote</h1>
+    <p class="tagline" id="appTagline">Say what you taste.</p>
   </div>
   <nav class="nav" aria-label="Main">
     <a href="#" id="navCapture" class="active">Capture</a>
@@ -351,7 +351,13 @@
       let manualSeconds = 0;
       let manualTimer = null;
 
-      let uiLang = (localStorage.getItem("uiLang") || "en").toLowerCase();
+      function normalizeUiLang(raw) {
+        const s = String(raw == null ? "en" : raw).toLowerCase().trim();
+        if (s === "zh" || s === "cn" || s.startsWith("zh-")) return "zh";
+        return "en";
+      }
+
+      let uiLang = normalizeUiLang(localStorage.getItem("uiLang"));
       let lastResultData = null;
 
       const startBtn = document.getElementById("startBtn");
@@ -372,6 +378,7 @@
       const navCapture = document.getElementById("navCapture");
       const navRepertoire = document.getElementById("navRepertoire");
       const langToggle = document.getElementById("langToggle");
+      const htmlRoot = document.getElementById("htmlRoot");
       const modeLabelEl = captureView.querySelector(".mode-label");
       const resultWhatEl = resultEl.querySelector("h2:not(.summary)");
       const resultSummaryEl = resultEl.querySelector("h2.summary");
@@ -402,13 +409,13 @@
           Winey: "Winey",
         },
         zh: {
-          Cereal: "穀物",
+          Cereal: "谷物",
           Fruity: "果香",
           Floral: "花香",
           Peaty: "泥煤",
-          Feinty: "雜味",
+          Feinty: "杂味",
           Sulphury: "硫磺",
-          Woody: "木質",
+          Woody: "木质",
           Winey: "酒香",
         },
       };
@@ -532,7 +539,7 @@
             if (manualSeconds >= MANUAL_MAX_SEC) {
               clearInterval(manualTimer);
               manualTimer = null;
-              setStatus("Max 5 min reached. Sending…");
+              setStatus(uiLang === "zh" ? "已达 5 分钟上限，正在发送…" : "Max 5 min reached. Sending…");
               manualStopAndSend();
             }
           }, 1000);
@@ -540,7 +547,7 @@
           manualStopBtn.disabled = false;
           startBtn.disabled = true;
           captureBtn.disabled = true;
-          setStatus("Recording. Take your time — press Stop & send when done (max 5 min).");
+          setStatus(uiLang === "zh" ? "正在录音。完成后按「停止并发送」（最多 5 分钟）。" : "Recording. Take your time — press Stop & send when done (max 5 min).");
         } catch (err) {
           setStatus("Microphone access denied or unavailable.", true);
         }
@@ -938,11 +945,25 @@
         loadRepertoireList();
       });
 
+      function headerTitleEl() {
+        return document.getElementById("appTitle") || document.querySelector(".header h1");
+      }
+      function headerTaglineEl() {
+        return document.getElementById("appTagline") || document.querySelector(".header .tagline");
+      }
+
       function applyLang() {
-        uiLang = uiLang === "zh" ? "zh" : "en";
+        uiLang = normalizeUiLang(uiLang);
+        const root = htmlRoot || document.documentElement;
+        root.setAttribute("lang", uiLang === "zh" ? "zh-CN" : "en");
         langToggle.textContent = uiLang === "zh" ? "中文" : "EN";
-        navCapture.textContent = uiLang === "zh" ? "錄音" : "Capture";
-        navRepertoire.textContent = uiLang === "zh" ? "酒單" : "Repertoire";
+        navCapture.textContent = uiLang === "zh" ? "录音" : "Capture";
+        navRepertoire.textContent = uiLang === "zh" ? "酒单" : "Repertoire";
+        const titleNode = headerTitleEl();
+        const taglineNode = headerTaglineEl();
+        if (titleNode) titleNode.textContent = uiLang === "zh" ? "品味笔记" : "Tastenote";
+        if (taglineNode) taglineNode.textContent = uiLang === "zh" ? "说你所尝。" : "Say what you taste.";
+        document.title = uiLang === "zh" ? "品味笔记" : "Tastenote";
         if (modeLabelEl) modeLabelEl.textContent = uiLang === "zh" ? "录音准备就绪" : "Record when ready";
         manualStartBtn.textContent = uiLang === "zh" ? "▶ 开始手动录音" : "▶ Start manual record";
         manualStopBtn.textContent = uiLang === "zh" ? "⏹ 停止并发送" : "⏹ Stop & send";
@@ -957,7 +978,8 @@
       }
       applyLang();
       langToggle.addEventListener("click", function () {
-        uiLang = uiLang === "zh" ? "en" : "zh";
+        const cur = normalizeUiLang(uiLang);
+        uiLang = cur === "zh" ? "en" : "zh";
         localStorage.setItem("uiLang", uiLang);
         applyLang();
         if (!repertoireView.hidden) loadRepertoireList();
